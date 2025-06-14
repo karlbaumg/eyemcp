@@ -1,18 +1,17 @@
-from typing import Any
-import httpx
 from mcp.server.fastmcp import FastMCP
 import asyncio
 import base64
-import os
-import openai
 from loguru import logger
+from vision import describe_screen_interactions
+
 
 # Configure logging: remove the default stderr sink and log exclusively to file.
 logger.remove()
-logger.add("mcp.log",encoding="utf-8", enqueue=True)
+logger.add("mcp.log", encoding="utf-8", enqueue=True)
 
 # Initialize FastMCP server
 mcp = FastMCP("eyemcp")
+
 
 async def take_android_screenshot(device_id: str | None = None) -> str:
     """Capture a screenshot from a connected Android device using ADB.
@@ -48,6 +47,7 @@ async def take_android_screenshot(device_id: str | None = None) -> str:
         )
     return base64.b64encode(stdout).decode()
 
+
 @mcp.tool()
 async def describe_screen(device_id: str | None = None) -> str:
     """Describe the screen of a connected Android device together with the pixel coordinates of the elements
@@ -58,39 +58,9 @@ async def describe_screen(device_id: str | None = None) -> str:
     """
 
     screenshot_b64: str = await take_android_screenshot(device_id)
-    data_url = f"data:image/png;base64,{screenshot_b64}"
 
-    messages: list[dict[str, Any]] = [
-        {
-            "role": "user",
-            "content": [
-                {
-                    "type": "text",
-                    "text": "List every clickable element on the screen with a description and the coordinate of its center to tap on it using adb. The dimensions of the screen is 720 wide x1616 high. Top left is the origin. coordinates are in pixels, x then y",
-                },
-                {
-                    "type": "image_url",
-                    "image_url": {"url": data_url},
-                },
-            ],
-        }
-    ]
-    try:
-        from openai import AsyncOpenAI
-        logger.info("Using OpenAI API")
+    return describe_screen_interactions(screenshot_b64)
 
-        client = AsyncOpenAI(base_url="http://127.0.0.1:1234/v1", api_key="abcd")
-        logger.info("Client created")
-        response = await client.chat.completions.create(
-            model="se-gui-7b",
-            messages=messages,
-        )
-        logger.info(response)
-        description = response.choices[0].message.content
-    except Exception as e:  
-        logger.error(f"Error: {e}")
-
-    return description.strip()
 
 @mcp.tool()
 async def tap_android_screen(x: int, y: int, device_id: str | None = None) -> str:
@@ -132,6 +102,7 @@ async def tap_android_screen(x: int, y: int, device_id: str | None = None) -> st
     _ = stdout
     return f"Tapped at ({x}, {y}) on device {device_id or '<default>'}."
 
+
 if __name__ == "__main__":
     # Initialize and run the server
-    mcp.run(transport='stdio')
+    mcp.run(transport="stdio")
