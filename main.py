@@ -5,8 +5,11 @@ import asyncio
 import base64
 import os
 import openai
+from loguru import logger
 
-api_key = ""
+# Configure logging: remove the default stderr sink and log exclusively to file.
+logger.remove()
+logger.add("mcp.log",encoding="utf-8", enqueue=True)
 
 # Initialize FastMCP server
 mcp = FastMCP("eyemcp")
@@ -47,14 +50,11 @@ async def take_android_screenshot(device_id: str | None = None) -> str:
 
 @mcp.tool()
 async def describe_screen(device_id: str | None = None) -> str:
-    """Capture a screenshot of the Android device and obtain a textual description from OpenAI.
-
-    Args:
-        device_id: Optional Android device serial (from ``adb devices``) if more
-            than one device is connected.
+    """Describe the screen of a connected Android device together with the pixel coordinates of the elements
+    that can be tapped on via adb. The dimensions of the screen is 720x1616.
 
     Returns:
-        A natural-language description of what is visible on the screen.
+        A natural-language description of what is visible on the screen along with the coordinates of the elements.
     """
 
     screenshot_b64: str = await take_android_screenshot(device_id)
@@ -66,7 +66,7 @@ async def describe_screen(device_id: str | None = None) -> str:
             "content": [
                 {
                     "type": "text",
-                    "text": "Please describe everything you see on this Android screenshot.",
+                    "text": "List every clickable element on the screen with a description and the coordinate of its center to tap on it using adb. The dimensions of the screen is 720 wide x1616 high. Top left is the origin. coordinates are in pixels, x then y",
                 },
                 {
                     "type": "image_url",
@@ -77,20 +77,18 @@ async def describe_screen(device_id: str | None = None) -> str:
     ]
     try:
         from openai import AsyncOpenAI
+        logger.info("Using OpenAI API")
 
-        client = AsyncOpenAI(api_key=api_key)
+        client = AsyncOpenAI(base_url="http://127.0.0.1:1234/v1", api_key="abcd")
+        logger.info("Client created")
         response = await client.chat.completions.create(
-            model="gpt-4o-mini",
+            model="se-gui-7b",
             messages=messages,
         )
+        logger.info(response)
         description = response.choices[0].message.content
-    except ImportError:
-        openai.api_key = api_key
-        response = await openai.ChatCompletion.acreate(
-            model="gpt-4o-mini",
-            messages=messages,
-        )
-        description = response.choices[0].message.content
+    except Exception as e:  
+        logger.error(f"Error: {e}")
 
     return description.strip()
 
@@ -115,6 +113,8 @@ async def tap_android_screen(x: int, y: int, device_id: str | None = None) -> st
     if device_id:
         cmd += ["-s", device_id]
     cmd += ["shell", "input", "tap", str(x), str(y)]
+
+    logger.info(f"Executing command: {cmd}")
 
     process = await asyncio.create_subprocess_exec(
         *cmd,
