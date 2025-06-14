@@ -1,4 +1,5 @@
 from loguru import logger
+from openai import OpenAI
 
 logger.add("vision.log", encoding="utf-8", enqueue=True)
 
