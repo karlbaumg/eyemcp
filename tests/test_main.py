@@ -3,13 +3,12 @@ from unittest.mock import patch, MagicMock, AsyncMock
 import base64
 from main import (
     take_android_screenshot,
-    describe_screen,
-    tap_android_screen,
-    find_element_by_description,
-    tap_element_by_description,
-    send_keys,
-    get_screenshot_image,
-    get_device_properties,
+    describe_visible_elements,
+    tap_screen,
+    tap_element_fallback,
+    input_text,
+    capture_screenshot,
+    get_device_info,
 )
 
 
@@ -75,8 +74,8 @@ async def test_take_android_screenshot_error():
 
 
 @pytest.mark.asyncio
-async def test_describe_screen():
-    """Test that describe_screen calls take_android_screenshot and describe_screen_interactions correctly."""
+async def test_describe_visible_elements():
+    """Test that describe_visible_elements calls take_android_screenshot and describe_screen_interactions correctly."""
     with (
         patch(
             "main.take_android_screenshot",
@@ -88,15 +87,15 @@ async def test_describe_screen():
     ):
 
         # Call the function
-        result = await describe_screen()
+        result = await describe_visible_elements()
 
         # Check that the result is the mock description
         assert result == "Mock screen description"
 
 
 @pytest.mark.asyncio
-async def test_tap_android_screen():
-    """Test that tap_android_screen calls the ADB command correctly."""
+async def test_tap_screen():
+    """Test that tap_screen calls the ADB command correctly."""
     # Mock the asyncio subprocess
     mock_process = MagicMock()
     mock_process.returncode = 0
@@ -106,7 +105,7 @@ async def test_tap_android_screen():
         "asyncio.create_subprocess_exec", return_value=mock_process
     ) as mock_exec:
         # Call the function
-        result = await tap_android_screen(100, 200)
+        result = await tap_screen(100, 200)
 
         # Check that the correct command was executed
         mock_exec.assert_called_once()
@@ -122,16 +121,16 @@ async def test_tap_android_screen():
 
 
 @pytest.mark.asyncio
-async def test_tap_android_screen_invalid_coordinates():
-    """Test that tap_android_screen validates coordinates."""
+async def test_tap_screen_invalid_coordinates():
+    """Test that tap_screen validates coordinates."""
     # Call the function with negative coordinates and check that it raises the expected error
     with pytest.raises(ValueError, match="Coordinates must be non-negative"):
-        await tap_android_screen(-10, 200)
+        await tap_screen(-10, 200)
 
 
 @pytest.mark.asyncio
-async def test_find_element_by_description():
-    """Test that find_element_by_description calls take_android_screenshot and find_element_coordinates_by_description correctly."""
+async def test_tap_element_fallback():
+    """Test that tap_element_fallback calls find_element_coordinates_by_description and tap_screen correctly."""
     mock_element_info = {
         "x": 100,
         "y": 200,
@@ -148,37 +147,11 @@ async def test_find_element_by_description():
             "main.find_element_coordinates_by_description",
             return_value=mock_element_info,
         ),
+        patch("main.tap_screen", AsyncMock(return_value="Tapped at (100, 200)")),
     ):
 
         # Call the function
-        result = await find_element_by_description("button")
-
-        # Check that the result is the mock element info
-        assert result == mock_element_info
-
-
-@pytest.mark.asyncio
-async def test_tap_element_by_description():
-    """Test that tap_element_by_description calls find_element_by_description and tap_android_screen correctly."""
-    mock_element_info = {
-        "x": 100,
-        "y": 200,
-        "confidence": 0.9,
-        "element_description": "Mock element",
-    }
-
-    with (
-        patch(
-            "main.find_element_by_description",
-            AsyncMock(return_value=mock_element_info),
-        ),
-        patch(
-            "main.tap_android_screen", AsyncMock(return_value="Tapped at (100, 200)")
-        ),
-    ):
-
-        # Call the function
-        result = await tap_element_by_description("button")
+        result = await tap_element_fallback("button")
 
         # Check that the result contains the expected information
         assert "Tapped element 'Mock element'" in result
@@ -187,8 +160,8 @@ async def test_tap_element_by_description():
 
 
 @pytest.mark.asyncio
-async def test_send_keys():
-    """Test that send_keys calls the ADB command correctly."""
+async def test_input_text():
+    """Test that input_text calls the ADB command correctly."""
     # Mock the asyncio subprocess
     mock_process = MagicMock()
     mock_process.returncode = 0
@@ -198,7 +171,7 @@ async def test_send_keys():
         "asyncio.create_subprocess_exec", return_value=mock_process
     ) as mock_exec:
         # Call the function
-        result = await send_keys("hello world")
+        result = await input_text("hello world")
 
         # Check that the correct command was executed
         mock_exec.assert_called_once()
@@ -212,26 +185,26 @@ async def test_send_keys():
         assert "Sent keystrokes 'hello world'" in result
 
 
-# This test is no longer applicable - the send_keys function doesn't support device_id
+# This test is no longer applicable - the input_text function doesn't support device_id
 # parameter since all tools exposed via MCP should not have device_id field
-@pytest.mark.skip("send_keys no longer supports device_id parameter")
+@pytest.mark.skip("input_text no longer supports device_id parameter")
 @pytest.mark.asyncio
-async def test_send_keys_with_device_id():
-    """Test that send_keys includes the device ID when provided."""
+async def test_input_text_with_device_id():
+    """Test that input_text includes the device ID when provided."""
     pass
 
 
 @pytest.mark.asyncio
-async def test_send_keys_empty_text():
-    """Test that send_keys validates that text is not empty."""
+async def test_input_text_empty_text():
+    """Test that input_text validates that text is not empty."""
     # Call the function with empty text and check that it raises the expected error
     with pytest.raises(ValueError, match="Text cannot be empty"):
-        await send_keys("")
+        await input_text("")
 
 
 @pytest.mark.asyncio
-async def test_send_keys_error():
-    """Test that send_keys handles errors correctly."""
+async def test_input_text_error():
+    """Test that input_text handles errors correctly."""
     # Mock the asyncio subprocess with error
     mock_process = MagicMock()
     mock_process.returncode = 1
@@ -240,12 +213,12 @@ async def test_send_keys_error():
     with patch("asyncio.create_subprocess_exec", return_value=mock_process):
         # Call the function and check that it raises the expected error
         with pytest.raises(RuntimeError, match="ADB input text command failed"):
-            await send_keys("hello world")
+            await input_text("hello world")
 
 
 @pytest.mark.asyncio
-async def test_get_screenshot_image():
-    """Test that get_screenshot_image calls the ADB command correctly and returns an Image object."""
+async def test_capture_screenshot():
+    """Test that capture_screenshot calls the ADB command correctly and returns an Image object."""
     # Mock the asyncio subprocess
     mock_process = MagicMock()
     mock_process.returncode = 0
@@ -259,7 +232,7 @@ async def test_get_screenshot_image():
         patch("main.Image", return_value=mock_image) as mock_image_class,
     ):
         # Call the function
-        result = await get_screenshot_image()
+        result = await capture_screenshot()
 
         # Check that the correct command was executed
         mock_exec.assert_called_once()
@@ -277,8 +250,8 @@ async def test_get_screenshot_image():
 
 
 @pytest.mark.asyncio
-async def test_get_screenshot_image_error():
-    """Test that get_screenshot_image handles errors correctly."""
+async def test_capture_screenshot_error():
+    """Test that capture_screenshot handles errors correctly."""
     # Mock the asyncio subprocess with error
     mock_process = MagicMock()
     mock_process.returncode = 1
@@ -290,14 +263,14 @@ async def test_get_screenshot_image_error():
     ):
         # Call the function and check that it raises the expected error
         with pytest.raises(RuntimeError, match="ADB screenshot command failed"):
-            await get_screenshot_image()
+            await capture_screenshot()
 
 
 @pytest.mark.asyncio
-async def test_get_device_properties():
-    """Test that get_device_properties returns device properties with the expected structure."""
+async def test_get_device_info():
+    """Test that get_device_info returns device properties with the expected structure."""
     # Call the function and check the returned data structure
-    result = await get_device_properties()
+    result = await get_device_info()
 
     # Check that the result is a dictionary with the expected keys
     assert isinstance(result, dict)
@@ -325,8 +298,8 @@ async def test_get_device_properties():
 
 
 @pytest.mark.asyncio
-async def test_get_device_properties_command_failures():
-    """Test that get_device_properties handles command failures gracefully."""
+async def test_get_device_info_command_failures():
+    """Test that get_device_info handles command failures gracefully."""
     # Mock the asyncio subprocess with all commands failing
     mock_process = MagicMock()
     mock_process.returncode = 1
@@ -334,7 +307,7 @@ async def test_get_device_properties_command_failures():
 
     with patch("asyncio.create_subprocess_exec", return_value=mock_process):
         # Call the function
-        result = await get_device_properties()
+        result = await get_device_info()
 
         # Check that the function returns a dictionary even with failures
         assert isinstance(result, dict)

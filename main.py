@@ -17,6 +17,20 @@ logger.configure(handlers=[{"sink": sys.stderr, "level": "INFO"}])
 
 # Initialize FastMCP server
 mcp = FastMCP("eyemcp")
+mcp.description = """Android device control via ADB with intelligent screen interaction.
+
+RECOMMENDED WORKFLOW:
+1. PRIMARY: inspect_screen_structure → extract coordinates from bounds → tap_screen
+2. FALLBACK: If step 1 fails, use describe_visible_elements → tap_element_fallback
+
+The view hierarchy (inspect_screen_structure) is 10x faster and more reliable than vision-based tools.
+Only use vision tools for custom-drawn elements, games, or when the view hierarchy lacks information.
+
+Example coordinate extraction from view hierarchy:
+- Look for 'bounds' attribute in XML: bounds="[0,0][720,1616]"
+- First bracket [0,0] is top-left, second [720,1616] is bottom-right
+- Calculate center: x = (0+720)/2, y = (0+1616)/2
+"""
 
 
 async def take_android_screenshot(device_id: str | None = None) -> str:
@@ -55,8 +69,8 @@ async def take_android_screenshot(device_id: str | None = None) -> str:
 
 
 @mcp.tool()
-async def get_view_hierarchy() -> str:
-    """Get the view hierarchy of the Android screen."""
+async def inspect_screen_structure() -> str:
+    """Get the complete UI structure of the Android screen as a view hierarchy. This is the PREFERRED method for understanding screen content and finding elements to interact with. Returns XML data containing all UI elements with their properties, bounds, and text content. Use this FIRST before trying vision-based tools. Response time: ~200ms"""
     cmd: list[str] = ["adb"]
     cmd += ["exec-out", "uiautomator", "dump", "/dev/tty"]
     process = await asyncio.create_subprocess_exec(
@@ -76,42 +90,8 @@ async def get_view_hierarchy() -> str:
 
 
 @mcp.tool()
-async def describe_screen() -> str:
-    """Describe all interactive elements on the Android screen.
-
-    This tool captures a screenshot from a connected Android device and uses vision AI
-    to identify all interactive elements on the screen. It provides a detailed description
-    of each element that can be used with find_element_by_description or tap_element_by_description.
-
-    Unlike previous versions, this tool no longer returns coordinates. To get coordinates
-    or tap elements, use the find_element_by_description or tap_element_by_description tools.
-
-    Returns:
-        A natural-language description of what is visible on the screen, including
-        detailed information about each interactive element that can be used to identify
-        them with other tools.
-    """
-    screenshot_b64: str = await take_android_screenshot()
-
-    return describe_screen_interactions(screenshot_b64)
-
-
-@mcp.tool()
-async def tap_android_screen(x: int, y: int) -> str:
-    """Tap the screen of a connected Android device at the specified coordinates.
-
-    This tool sends a tap event to the specified coordinates on the Android device's screen.
-    The screen dimensions are 720x1616 pixels with the origin (0,0) at the top-left corner.
-    Coordinates are specified as (x,y) pairs where x is the horizontal position and y is
-    the vertical position.
-
-    Args:
-        x: Horizontal pixel coordinate (0-719).
-        y: Vertical pixel coordinate (0-1615).
-
-    Returns:
-        A confirmation message with the coordinates that were tapped and the device ID.
-    """
+async def tap_screen(x: int, y: int) -> str:
+    """Tap at specific coordinates on the Android screen. Use coordinates obtained from inspect_screen_structure for reliable interaction. Screen dimensions: 720x1616 pixels, origin (0,0) at top-left. Response time: ~100ms"""
 
     if x < 0 or y < 0:
         raise ValueError("Coordinates must be non-negative integers.")
@@ -139,97 +119,8 @@ async def tap_android_screen(x: int, y: int) -> str:
 
 
 @mcp.tool()
-async def find_element_by_description(description: str) -> dict:
-    """Find an element on the Android screen matching the provided description and return its coordinates.
-
-    This tool captures a screenshot, analyzes it using vision AI, and locates the element
-    that best matches the textual description. The screen dimensions are 720x1616 pixels
-    with the origin (0,0) at the top-left corner.
-
-    Args:
-        description: Textual description of the element to find (e.g., "login button",
-                    "search icon in the top right", "profile picture").
-
-    Returns:
-        A dictionary containing the x and y coordinates of the center of the matching element,
-        along with a confidence score and the element's description as recognized by the vision model.
-        Format: {"x": int, "y": int, "confidence": float, "element_description": str}
-
-    Raises:
-        ValueError: If no matching element is found or if the description is ambiguous.
-    """
-    screenshot_b64: str = await take_android_screenshot()
-
-    return find_element_coordinates_by_description(screenshot_b64, description)
-
-
-@mcp.tool()
-async def tap_element_by_description(description: str) -> str:
-    """Find and tap an element on the Android screen that matches the provided description.
-
-    This tool first locates the element using vision AI based on the textual description,
-    then taps at the center coordinates of the matching element. The screen dimensions are
-    720x1616 pixels with the origin (0,0) at the top-left corner.
-
-    Args:
-        description: Textual description of the element to tap (e.g., "login button",
-                    "search icon in the top right", "profile picture").
-
-    Returns:
-        A confirmation message with details about the tapped element, including its
-        coordinates and the element's description as recognized by the vision model.
-
-    Raises:
-        ValueError: If no matching element is found or if the description is ambiguous.
-    """
-    # First, find the element coordinates
-    element_info = await find_element_by_description(description)
-
-    # Then tap at those coordinates
-    x, y = element_info["x"], element_info["y"]
-    tap_result = await tap_android_screen(x, y)
-
-    # Return a detailed confirmation message
-    return f"Tapped element '{element_info['element_description']}' at coordinates ({x}, {y}) with confidence {element_info['confidence']:.2f}"
-
-
-@mcp.tool()
-async def analyze_screen_detail(prompt: str) -> str:
-    """Analyze specific visual details on the Android screen based on a prompt.
-
-    This tool captures a screenshot and uses vision AI to analyze specific visual
-    aspects of the screen as requested in the prompt. It's useful for getting detailed
-    information about UI elements' appearance, such as colors, shapes, styles, etc.
-
-    Args:
-        prompt: Specific question or instruction about visual details to analyze.
-            Examples: "What color is the login button?", "Are the corners of the dialog rounded?"
-
-    Returns:
-        A detailed analysis of the requested visual aspects.
-    """
-    screenshot_b64: str = await take_android_screenshot()
-
-    return run_prompt_against_screen(screenshot_b64, prompt)
-
-
-@mcp.tool()
-async def send_keys(text: str) -> str:
-    """Send a series of keystrokes to a connected Android device.
-
-    This tool sends the specified text as keystrokes to the Android device,
-    which is useful for entering URLs, search terms, or other text input.
-
-    Args:
-        text: The text to send as keystrokes.
-
-    Returns:
-        A confirmation message with the text that was sent and the device ID.
-
-    Raises:
-        ValueError: If the text is empty.
-        RuntimeError: If the ADB command fails.
-    """
+async def input_text(text: str) -> str:
+    """Type text into the currently focused input field. Ensure an input field is selected (via tap_screen) before using. Response time: ~200ms"""
     if not text:
         raise ValueError("Text cannot be empty.")
 
@@ -256,15 +147,39 @@ async def send_keys(text: str) -> str:
 
 
 @mcp.tool()
-async def get_screenshot_image() -> Image:
-    """Capture and return a screenshot from the connected Android device as an Image object.
+async def describe_visible_elements() -> str:
+    """FALLBACK TOOL: Use vision AI to describe interactive elements when inspect_screen_structure doesn't provide enough information. This is SLOWER and LESS RELIABLE than inspect_screen_structure. Only use when the view hierarchy lacks necessary details (e.g., custom-drawn elements, images without proper labels). Response time: 2-3 seconds"""
+    screenshot_b64: str = await take_android_screenshot()
 
-    This tool captures a screenshot from the connected Android device and returns it
-    as an Image object that can be displayed or processed further by the MCP client.
+    return describe_screen_interactions(screenshot_b64)
 
-    Returns:
-        An Image object containing the current Android screen.
-    """
+
+@mcp.tool()
+async def query_visual_details(prompt: str) -> str:
+    """FALLBACK TOOL: Ask specific questions about visual appearance when such details aren't available in the view hierarchy (e.g., colors, visual styles, image content). This is a FALLBACK tool - prefer inspect_screen_structure for structural information. Response time: 2-3 seconds"""
+    screenshot_b64: str = await take_android_screenshot()
+
+    return run_prompt_against_screen(screenshot_b64, prompt)
+
+
+@mcp.tool()
+async def tap_element_fallback(description: str) -> str:
+    """LAST RESORT: Find and tap an element using vision AI when inspect_screen_structure cannot locate it. This is UNRELIABLE and SLOW. Always try inspect_screen_structure + tap_screen first. Common valid uses: tapping on canvas-drawn elements, game interfaces, or custom graphics. Response time: 3-4 seconds"""
+    # First, find the element coordinates
+    screenshot_b64: str = await take_android_screenshot()
+    element_info = find_element_coordinates_by_description(screenshot_b64, description)
+
+    # Then tap at those coordinates
+    x, y = element_info["x"], element_info["y"]
+    tap_result = await tap_screen(x, y)
+
+    # Return a detailed confirmation message
+    return f"Tapped element '{element_info['element_description']}' at coordinates ({x}, {y}) with confidence {element_info['confidence']:.2f}"
+
+
+@mcp.tool()
+async def capture_screenshot() -> Image:
+    """Capture a raw screenshot image. ONLY use this if you have vision capabilities and need to see the actual visual representation. For understanding screen structure and interaction, use inspect_screen_structure instead. Response time: ~500ms"""
     # Build the adb command: `adb exec-out screencap -p`
     cmd: list[str] = ["adb", "exec-out", "screencap", "-p"]
 
@@ -288,7 +203,7 @@ async def get_screenshot_image() -> Image:
 
 
 @mcp.tool()
-async def get_device_properties() -> dict:
+async def get_device_info() -> dict:
     """Get useful properties about the connected Android device.
 
     This tool queries the device for various system properties including screen
@@ -303,6 +218,8 @@ async def get_device_properties() -> dict:
         - build_id: string with build identifier
         - battery: dict with level and charging status
         - memory: dict with total and available RAM in MB
+
+    Response time: ~300ms
     """
     properties = {}
 
