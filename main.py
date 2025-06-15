@@ -54,6 +54,28 @@ async def take_android_screenshot(device_id: str | None = None) -> str:
         )
     return base64.b64encode(stdout).decode()
 
+@mcp.tool()
+async def get_view_hierarchy(device_id: str | None = None) -> str:
+    """Get the view hierarchy of the Android screen.
+    """
+    cmd: list[str] = ["adb"]
+    if device_id:
+        cmd += ["-s", device_id]
+    cmd += ["exec-out", "uiautomator", "dump", "/dev/tty"]
+    process = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+
+    stdout, stderr = await process.communicate()
+
+    if process.returncode != 0:
+        raise RuntimeError(
+            f"ADB uiautomator dump command failed (exit code {process.returncode}): "
+            f"{stderr.decode().strip()}"
+        )
+    return stdout.decode().strip()
 
 @mcp.tool()
 async def describe_screen(device_id: str | None = None) -> str:
