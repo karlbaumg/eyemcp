@@ -1,4 +1,4 @@
-from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp import FastMCP, Image
 import asyncio
 import base64
 import sys
@@ -253,6 +253,157 @@ async def send_keys(text: str) -> str:
         )
     _ = stdout
     return f"Sent keystrokes '{text}' to device."
+
+
+@mcp.tool()
+async def get_screenshot_image() -> Image:
+    """Capture and return a screenshot from the connected Android device as an Image object.
+
+    This tool captures a screenshot from the connected Android device and returns it
+    as an Image object that can be displayed or processed further by the MCP client.
+
+    Returns:
+        An Image object containing the current Android screen.
+    """
+    # Build the adb command: `adb exec-out screencap -p`
+    cmd: list[str] = ["adb", "exec-out", "screencap", "-p"]
+
+    # Execute the command asynchronously and capture stdout
+    process = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+
+    stdout, stderr = await process.communicate()
+
+    if process.returncode != 0:
+        raise RuntimeError(
+            f"ADB screenshot command failed (exit code {process.returncode}): "
+            f"{stderr.decode().strip()}"
+        )
+
+    # Return the raw PNG binary data wrapped in an Image object
+    return Image(data=stdout, format="PNG")
+
+
+@mcp.tool()
+async def get_device_properties() -> dict:
+    """Get useful properties about the connected Android device.
+
+    This tool queries the device for various system properties including screen
+    dimensions, Android version, device model, and other hardware/software information.
+
+    Returns:
+        A dictionary containing device properties with the following keys:
+        - screen_dimensions: dict with width and height in pixels
+        - android_version: string with OS version
+        - device_model: string with device model name
+        - manufacturer: string with device manufacturer
+        - build_id: string with build identifier
+        - battery: dict with level and charging status
+        - memory: dict with total and available RAM in MB
+    """
+    properties = {}
+
+    # Helper function to execute ADB commands and get output
+    async def adb_get_prop(command):
+        proc = await asyncio.create_subprocess_exec(
+            *command,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await proc.communicate()
+        if proc.returncode != 0:
+            logger.warning(f"Command failed: {command}")
+            return ""
+        return stdout.decode().strip()
+
+    # Get screen dimensions
+    dimensions_str = await adb_get_prop(["adb", "shell", "wm", "size"])
+    if "size:" in dimensions_str:
+        dimensions = dimensions_str.split("size:")[1].strip().split("x")
+        if len(dimensions) == 2:
+            properties["screen_dimensions"] = {
+                "width": int(dimensions[0]),
+                "height": int(dimensions[1]),
+            }
+
+    # Get Android version
+    android_version = await adb_get_prop(
+        ["adb", "shell", "getprop", "ro.build.version.release"]
+    )
+    sdk_version = await adb_get_prop(
+        ["adb", "shell", "getprop", "ro.build.version.sdk"]
+    )
+    properties["android_version"] = {"release": android_version, "sdk": sdk_version}
+
+    # Get device model and manufacturer
+    properties["device_model"] = await adb_get_prop(
+        ["adb", "shell", "getprop", "ro.product.model"]
+    )
+    properties["manufacturer"] = await adb_get_prop(
+        ["adb", "shell", "getprop", "ro.product.manufacturer"]
+    )
+    properties["build_id"] = await adb_get_prop(
+        ["adb", "shell", "getprop", "ro.build.id"]
+    )
+
+    # Get battery info
+    battery_level = await adb_get_prop(
+        ["adb", "shell", "dumpsys", "battery", "|", "grep", "level"]
+    )
+    battery_status = await adb_get_prop(
+        ["adb", "shell", "dumpsys", "battery", "|", "grep", "status"]
+    )
+
+    properties["battery"] = {}
+    if "level" in battery_level:
+        try:
+            properties["battery"]["level"] = int(
+                battery_level.split("level:")[1].strip()
+            )
+        except (IndexError, ValueError):
+            properties["battery"]["level"] = -1
+
+    if "status" in battery_status:
+        try:
+            status_code = int(battery_status.split("status:")[1].strip())
+            # Status codes: 1=unknown, 2=charging, 3=discharging, 4=not charging, 5=full
+            status_map = {
+                1: "unknown",
+                2: "charging",
+                3: "discharging",
+                4: "not_charging",
+                5: "full",
+            }
+            properties["battery"]["status"] = status_map.get(status_code, "unknown")
+        except (IndexError, ValueError):
+            properties["battery"]["status"] = "unknown"
+
+    # Get memory information
+    mem_info = await adb_get_prop(["adb", "shell", "cat", "/proc/meminfo"])
+    properties["memory"] = {}
+
+    if mem_info:
+        lines = mem_info.splitlines()
+        for line in lines:
+            if "MemTotal" in line:
+                try:
+                    # Convert from kB to MB
+                    total = int(line.split()[1]) // 1024
+                    properties["memory"]["total_mb"] = total
+                except (IndexError, ValueError):
+                    pass
+            elif "MemAvailable" in line:
+                try:
+                    # Convert from kB to MB
+                    available = int(line.split()[1]) // 1024
+                    properties["memory"]["available_mb"] = available
+                except (IndexError, ValueError):
+                    pass
+
+    return properties
 
 
 if __name__ == "__main__":
