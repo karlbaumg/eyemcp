@@ -2,7 +2,6 @@ from mcp.server.fastmcp import FastMCP
 import asyncio
 import base64
 import sys
-import os
 from loguru import logger
 from vision import (
     describe_screen_interactions,
@@ -225,21 +224,14 @@ async def analyze_screen_detail(prompt: str, device_id: str | None = None) -> st
 
 
 @mcp.tool()
-async def calibrate(
-    calibration_file: str = "calibration.csv", device_id: str | None = None
-) -> str:
+async def calibrate(device_id: str | None = None) -> str:
     """Calibrate the coordinate system using known reference points.
 
-    This tool navigates to the home screen and then uses the provided calibration file
+    This tool navigates to the home screen and then uses hardcoded reference points
     to calculate scaling factors for x and y coordinates. These scaling factors are used
     to adjust coordinates in all other tools to ensure accurate element targeting.
 
-    The calibration file should be a CSV with columns: description, x, y containing
-    reference elements and their expected coordinates.
-
     Args:
-        calibration_file: Path to a CSV file with columns: description, x, y
-                         containing reference elements and their expected coordinates.
         device_id: Optional serial number of the target device as returned by
                   ``adb devices``. If omitted, the first connected device is used.
 
@@ -247,24 +239,11 @@ async def calibrate(
         A confirmation message with the calculated scaling factors.
 
     Raises:
-        FileNotFoundError: If the calibration file does not exist.
         ValueError: If calibration fails due to inability to find reference elements.
     """
-    # Check if calibration file exists
-    if not os.path.exists(calibration_file):
-        # Try to create a sample calibration file
-        try:
-            logger.info(
-                f"Calibration file not found. Creating sample at {calibration_file}"
-            )
-        except Exception as e:
-            raise FileNotFoundError(f"Calibration file not found: {e}")
-
     # Load calibration data
-    calibration_points = calibration.load_calibration_data(calibration_file)
-    logger.info(
-        f"Loaded {len(calibration_points)} calibration points from {calibration_file}"
-    )
+    calibration_points = calibration.load_calibration_data()
+    logger.info(f"Loaded {len(calibration_points)} calibration points ")
 
     # Define a wrapper function for find_element_by_description that doesn't apply scaling
     # (since we're calculating the scaling factors)

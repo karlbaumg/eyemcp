@@ -2,7 +2,7 @@
 Evaluation script for vision calibration accuracy.
 
 This script evaluates the accuracy of the vision system by:
-1. Loading calibration data from calibration.csv
+1. Using hardcoded calibration reference points
 2. Using the actual screenshot (ss.png) to find elements
 3. For each entry, calculating:
    - Pre-calibration absolute error (in pixels)
@@ -13,11 +13,10 @@ This script evaluates the accuracy of the vision system by:
 """
 
 import base64
-import csv
 import json
 import math
 import statistics
-from typing import Dict, List, Any
+from typing import Dict, List
 import asyncio
 
 from dotenv import load_dotenv
@@ -26,30 +25,6 @@ from vision import find_element_coordinates_by_description
 
 # Ensure environment variables are loaded
 load_dotenv()
-
-
-def load_calibration_data(file_path: str) -> List[Dict[str, Any]]:
-    """Load calibration data from a CSV file.
-
-    Args:
-        file_path: Path to the CSV file containing calibration data.
-
-    Returns:
-        A list of dictionaries, each containing 'description', 'x', and 'y' keys.
-    """
-    calibration_points = []
-
-    with open(file_path, "r") as csvfile:
-        reader = csv.DictReader(csvfile)
-        for row in reader:
-            point = {
-                "description": row["description"],
-                "x": int(row["x"]),
-                "y": int(row["y"]),
-            }
-            calibration_points.append(point)
-
-    return calibration_points
 
 
 def load_screenshot_base64(file_path: str) -> str:
@@ -161,15 +136,14 @@ def calculate_statistics(
     return stats
 
 
-async def evaluate_calibration(calibration_file: str, screenshot_file: str) -> None:
+async def evaluate_calibration(screenshot_file: str) -> None:
     """Evaluate calibration accuracy using the provided screenshot.
 
     Args:
-        calibration_file: Path to the calibration CSV file.
         screenshot_file: Path to the screenshot file.
     """
     # Load calibration data
-    calibration_points = load_calibration_data(calibration_file)
+    calibration_points = calibration.load_calibration_data()
 
     # Load screenshot
     screenshot_base64 = load_screenshot_base64(screenshot_file)
@@ -370,4 +344,4 @@ async def evaluate_calibration(calibration_file: str, screenshot_file: str) -> N
 
 
 if __name__ == "__main__":
-    asyncio.run(evaluate_calibration("calibration.csv", "ss.png"))
+    asyncio.run(evaluate_calibration("ss.png"))

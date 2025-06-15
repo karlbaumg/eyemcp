@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import patch, MagicMock, mock_open
+from unittest.mock import patch, MagicMock
 from calibration import (
     get_scaling_factors,
     is_calibrated,
@@ -40,38 +40,21 @@ def test_apply_scaling():
         assert y == 160
 
 
-def test_load_calibration_data_file_not_found():
-    # Test with non-existent file
-    with pytest.raises(FileNotFoundError):
-        load_calibration_data("nonexistent_file.csv")
+def test_load_calibration_data():
+    # Test that the function returns the hardcoded data
+    from calibration import DEFAULT_CALIBRATION_POINTS
 
+    data = load_calibration_data()
 
-def test_load_calibration_data_invalid_format():
-    # Test with invalid CSV format
-    mock_csv_content = "invalid,header\n1,2,3"
-    with (
-        patch("os.path.exists", return_value=True),
-        patch("builtins.open", mock_open(read_data=mock_csv_content)),
-    ):
-        with pytest.raises(ValueError):
-            load_calibration_data("test.csv")
+    # Verify it returns a copy of the default data
+    assert data == DEFAULT_CALIBRATION_POINTS
+    assert (
+        data is not DEFAULT_CALIBRATION_POINTS
+    )  # Should be a copy, not the same object
 
-
-def test_load_calibration_data_valid():
-    # Test with valid CSV format
-    mock_csv_content = "description,x,y\nTest Element,100,200\nAnother Element,300,400"
-    with (
-        patch("os.path.exists", return_value=True),
-        patch("builtins.open", mock_open(read_data=mock_csv_content)),
-    ):
-        data = load_calibration_data("test.csv")
-        assert len(data) == 2
-        assert data[0]["description"] == "Test Element"
-        assert data[0]["x"] == 100
-        assert data[0]["y"] == 200
-        assert data[1]["description"] == "Another Element"
-        assert data[1]["x"] == 300
-        assert data[1]["y"] == 400
+    # Verify it ignores the file_path parameter
+    data_with_path = load_calibration_data("some_file.csv")
+    assert data_with_path == DEFAULT_CALIBRATION_POINTS
 
 
 @pytest.mark.asyncio

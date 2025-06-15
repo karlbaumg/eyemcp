@@ -12,28 +12,30 @@ The test suite is organized into three main files:
 
 ## Running Tests
 
+**IMPORTANT**: Always use `python -m pytest` instead of just `pytest` to ensure the Python path is set correctly.
+
 To run the entire test suite:
 
 ```bash
-pytest
+python -m pytest
 ```
 
 To run a specific test file:
 
 ```bash
-pytest tests/test_main.py
+python -m pytest tests/test_main.py
 ```
 
 To run a specific test:
 
 ```bash
-pytest tests/test_main.py::test_describe_screen
+python -m pytest tests/test_main.py::test_describe_screen
 ```
 
 To run tests with verbose output:
 
 ```bash
-pytest -v
+python -m pytest -v
 ```
 
 ## Test Coverage

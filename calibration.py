@@ -2,17 +2,34 @@
 Calibration module for Android screen interaction.
 
 This module provides functionality to calibrate the coordinate system used for
-interacting with Android device screens. It reads a calibration file containing
+interacting with Android device screens. It uses hardcoded reference points of
 known UI elements with their expected coordinates, then uses vision AI to find
 the actual coordinates of these elements, and calculates scaling factors to
 adjust between vision space and device space coordinates.
 """
 
-import csv
-import os
 import asyncio
 from typing import Dict, List, Tuple, Optional
 from loguru import logger
+
+# Default calibration points (converted from calibration.csv)
+DEFAULT_CALIBRATION_POINTS = [
+    {"description": "Google Chrome Icon", "x": 620, "y": 1320},
+    {"description": "Phone Icon", "x": 98, "y": 1320},
+    {"description": "Circular home button at bottom of screen", "x": 360, "y": 1575},
+    # {
+    #     "description": "Center of the letter a in the text Tap to setup",
+    #     "x": 85,
+    #     "y": 145,
+    # },
+    {"description": "Center of the search bar at the bottom", "x": 360, "y": 1475},
+    # {
+    #     "description": "first dot in the three-dot pagination indicator in the top third of the screen toward the left",
+    #     "x": 158,
+    #     "y": 64,
+    # },
+    # We have an issue as there is nothing reliable to calibrate with at the top of the home screen.
+]
 
 # Global scaling factors
 _scaling_x: float = 1.0
@@ -55,55 +72,17 @@ def apply_scaling(x: float, y: float) -> Tuple[int, int]:
     return (scaled_x, scaled_y)
 
 
-def load_calibration_data(file_path: str) -> List[Dict[str, any]]:
-    """Load calibration data from a CSV file.
+def load_calibration_data(file_path: str = None) -> List[Dict[str, any]]:
+    """Get calibration data from hardcoded reference points.
 
     Args:
-        file_path: Path to the CSV file containing calibration data.
+        file_path: Ignored parameter kept for backward compatibility.
 
     Returns:
         A list of dictionaries, each containing 'description', 'x', and 'y' keys.
-
-    Raises:
-        FileNotFoundError: If the calibration file does not exist.
-        ValueError: If the calibration file has an invalid format.
     """
-    if not os.path.exists(file_path):
-        raise FileNotFoundError(f"Calibration file not found: {file_path}")
-
-    calibration_points = []
-
-    try:
-        with open(file_path, "r") as csvfile:
-            reader = csv.DictReader(csvfile)
-
-            # Validate header
-            required_fields = ["description", "x", "y"]
-            if not all(field in reader.fieldnames for field in required_fields):
-                raise ValueError(
-                    f"Calibration file must contain columns: {', '.join(required_fields)}"
-                )
-
-            for row in reader:
-                try:
-                    point = {
-                        "description": row["description"],
-                        "x": int(row["x"]),
-                        "y": int(row["y"]),
-                    }
-                    calibration_points.append(point)
-                except (ValueError, KeyError) as e:
-                    logger.warning(
-                        f"Skipping invalid row in calibration file: {row}. Error: {e}"
-                    )
-
-    except Exception as e:
-        raise ValueError(f"Failed to read calibration file: {e}")
-
-    if not calibration_points:
-        raise ValueError("No valid calibration points found in the file")
-
-    return calibration_points
+    # Always return a copy of the default calibration points
+    return DEFAULT_CALIBRATION_POINTS.copy()
 
 
 async def go_to_home_screen(device_id: Optional[str] = None) -> None:
