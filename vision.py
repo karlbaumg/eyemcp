@@ -99,6 +99,78 @@ def describe_screen_interactions(screenshot_b64: str) -> str:
     return description.strip()
 
 
+def analyze_screen_detail(screenshot_b64: str, prompt: str) -> str:
+    """Analyze specific visual details in a screenshot based on a prompt.
+
+    This function uses vision AI to analyze specific visual aspects of the screen
+    as requested in the prompt. It's useful for getting detailed information about
+    UI elements' appearance, such as colors, shapes, styles, etc.
+
+    Args:
+        screenshot_b64: Base64-encoded screenshot image (PNG format).
+        prompt: Specific question or instruction about visual details to analyze.
+            Examples: "What color is the login button?", "Are the corners of the dialog rounded?"
+
+    Returns:
+        A string containing the detailed analysis of the requested visual aspects.
+    """
+    data_url = f"data:image/png;base64,{screenshot_b64}"
+
+    messages: list[dict[str, Any]] = [
+        {
+            "role": "system",
+            "content": "You are an expert at analyzing mobile app UI design and visual details. Focus on providing accurate, detailed information about the visual aspects of UI elements such as colors, shapes, typography, spacing, and other design characteristics. Be precise in your descriptions, using proper design terminology where appropriate.",
+        },
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "text",
+                    "text": f"Analyze this screenshot and answer the following question about visual details: {prompt}",
+                },
+                {
+                    "type": "image_url",
+                    "image_url": {"url": data_url},
+                },
+            ],
+        },
+    ]
+    analysis = ""
+    try:
+        logger.info(f"Using provider: {PROVIDER}")
+
+        if PROVIDER == "local":
+            # Use local provider
+            logger.info(f"Connecting to local model: {LOCAL_MODEL}")
+            client = OpenAI(base_url=LOCAL_BASE_URL, api_key=LOCAL_API_KEY)
+            model = LOCAL_MODEL
+        elif PROVIDER == "openrouter":
+            # Use OpenRouter
+            if not OPENROUTER_API_KEY:
+                raise ValueError(
+                    "OPENROUTER_API_KEY not found in .env file. Please create a .env file with your API key."
+                )
+
+            logger.info(f"Connecting to OpenRouter model: {OPENROUTER_MODEL}")
+            client = OpenAI(base_url=OPENROUTER_BASE_URL, api_key=OPENROUTER_API_KEY)
+            model = OPENROUTER_MODEL
+        else:
+            raise ValueError(f"Unknown provider: {PROVIDER}")
+
+        logger.info("Client created")
+        response = client.chat.completions.create(
+            model=model,
+            messages=messages,
+        )
+        logger.info("Response received")
+        analysis = response.choices[0].message.content
+    except Exception as e:
+        logger.error(f"Error analyzing screen detail: {e}")
+        analysis = f"Error analyzing screen detail: {str(e)}"
+
+    return analysis.strip()
+
+
 def find_element_coordinates_by_description(
     screenshot_b64: str, element_description: str
 ) -> Dict[str, Any]:

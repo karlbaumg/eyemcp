@@ -1,7 +1,11 @@
 import pytest
 from unittest.mock import patch, MagicMock
 import json
-from vision import describe_screen_interactions, find_element_coordinates_by_description
+from vision import (
+    describe_screen_interactions,
+    find_element_coordinates_by_description,
+    analyze_screen_detail,
+)
 
 
 @pytest.fixture
@@ -194,6 +198,55 @@ def test_find_element_coordinates_invalid_response():
         # Call the function and check that it raises the expected error
         with pytest.raises(ValueError, match="Invalid response format"):
             find_element_coordinates_by_description("mock_screenshot_base64", "button")
+
+
+def test_analyze_screen_detail(mock_openai_client):
+    """Test that analyze_screen_detail calls the OpenAI API correctly and returns the response."""
+    with (
+        patch("vision.OpenAI", return_value=mock_openai_client),
+        patch("vision.PROVIDER", "openrouter"),
+        patch("vision.OPENROUTER_API_KEY", "test_key"),
+    ):
+
+        # Call the function with a mock screenshot and prompt
+        result = analyze_screen_detail(
+            "mock_screenshot_base64", "What color is the login button?"
+        )
+
+        # Check that the client was called with the correct parameters
+        mock_openai_client.chat.completions.create.assert_called_once()
+        args, kwargs = mock_openai_client.chat.completions.create.call_args
+
+        # Check that the model is set correctly
+        assert kwargs["model"] is not None
+
+        # Check that the messages contain the screenshot and prompt
+        messages = kwargs["messages"]
+        user_message = [m for m in messages if m["role"] == "user"][0]
+        assert "What color is the login button?" in user_message["content"][0]["text"]
+        assert "image_url" in user_message["content"][1]
+
+        # Check that the result is the mock response
+        assert result == "Mock response content"
+
+
+def test_analyze_screen_detail_error_handling():
+    """Test that analyze_screen_detail handles errors correctly."""
+    with (
+        patch("vision.OpenAI", side_effect=Exception("API Error")),
+        patch("vision.logger.error") as mock_logger,
+    ):
+
+        # Call the function with a mock screenshot and prompt
+        result = analyze_screen_detail(
+            "mock_screenshot_base64", "What color is the login button?"
+        )
+
+        # Check that the error was logged
+        mock_logger.assert_called_once()
+
+        # Check that an error message is returned
+        assert "Error analyzing screen detail" in result
 
 
 def test_find_element_coordinates_api_error():

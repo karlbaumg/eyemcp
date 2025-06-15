@@ -4,7 +4,11 @@ import base64
 import sys
 import os
 from loguru import logger
-from vision import describe_screen_interactions, find_element_coordinates_by_description
+from vision import (
+    describe_screen_interactions,
+    find_element_coordinates_by_description,
+    analyze_screen_detail,
+)
 import calibration
 
 
@@ -199,6 +203,28 @@ async def tap_element_by_description(
 
 
 @mcp.tool()
+async def analyze_screen_detail(prompt: str, device_id: str | None = None) -> str:
+    """Analyze specific visual details on the Android screen based on a prompt.
+
+    This tool captures a screenshot and uses vision AI to analyze specific visual
+    aspects of the screen as requested in the prompt. It's useful for getting detailed
+    information about UI elements' appearance, such as colors, shapes, styles, etc.
+
+    Args:
+        prompt: Specific question or instruction about visual details to analyze.
+            Examples: "What color is the login button?", "Are the corners of the dialog rounded?"
+        device_id: Optional serial number of the target device as returned by
+                  ``adb devices``. If omitted, the first connected device is used.
+
+    Returns:
+        A detailed analysis of the requested visual aspects.
+    """
+    screenshot_b64: str = await take_android_screenshot(device_id)
+
+    return analyze_screen_detail(screenshot_b64, prompt)
+
+
+@mcp.tool()
 async def calibrate(
     calibration_file: str = "calibration.csv", device_id: str | None = None
 ) -> str:
@@ -257,6 +283,52 @@ async def calibrate(
         f"Calibration complete. Scaling factors: x={scaling_x:.3f}, y={scaling_y:.3f}. "
         f"These factors will be applied to all coordinate operations."
     )
+
+
+@mcp.tool()
+async def send_keys(text: str, device_id: str | None = None) -> str:
+    """Send a series of keystrokes to a connected Android device.
+
+    This tool sends the specified text as keystrokes to the Android device,
+    which is useful for entering URLs, search terms, or other text input.
+
+    Args:
+        text: The text to send as keystrokes.
+        device_id: Optional serial number of the target device as returned by
+                  ``adb devices``. If omitted, the first connected device is used.
+
+    Returns:
+        A confirmation message with the text that was sent and the device ID.
+
+    Raises:
+        ValueError: If the text is empty.
+        RuntimeError: If the ADB command fails.
+    """
+    if not text:
+        raise ValueError("Text cannot be empty.")
+
+    cmd: list[str] = ["adb"]
+    if device_id:
+        cmd += ["-s", device_id]
+    cmd += ["shell", "input", "text", text]
+
+    logger.info(f"Executing command: {cmd}")
+
+    process = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+
+    stdout, stderr = await process.communicate()
+
+    if process.returncode != 0:
+        raise RuntimeError(
+            f"ADB input text command failed (exit code {process.returncode}): "
+            f"{stderr.decode().strip()}"
+        )
+    _ = stdout
+    return f"Sent keystrokes '{text}' to device {device_id or '<default>'}."
 
 
 if __name__ == "__main__":

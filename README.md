@@ -143,6 +143,26 @@ Find and tap an element based on a textual description:
 }
 ```
 
+#### Analyze Screen Detail
+
+Analyze specific visual details on the screen based on a prompt:
+
+```json
+{
+  "tool": "analyze_screen_detail",
+  "args": {
+    "prompt": "What color is the login button and does it have rounded corners?"
+  }
+}
+```
+
+This tool is useful for getting detailed information about UI elements' visual appearance, such as:
+- Colors of specific elements
+- Shape characteristics (rounded corners, borders, etc.)
+- Typography details (font sizes, styles, etc.)
+- Spacing and layout information
+- Visual design patterns and consistency
+
 #### Direct Coordinate Tapping
 
 Tap at specific coordinates:
@@ -156,6 +176,24 @@ Tap at specific coordinates:
   }
 }
 ```
+
+#### Send Keystrokes
+
+Send a series of keystrokes to the device:
+
+```json
+{
+  "tool": "send_keys",
+  "args": {
+    "text": "https://example.com"
+  }
+}
+```
+
+Optional parameters:
+- `device_id`: Specify a device ID if multiple devices are connected
+
+This tool is useful for entering text such as URLs, search terms, or login credentials.
 
 ### Calibration Tools
 
@@ -183,7 +221,9 @@ Calibrate the coordinate system using a calibration file:
 
 4. **Use relative positions**: Include relative positions in your descriptions (e.g., "button at the bottom of the screen" or "icon in the top-right corner").
 
-5. **Handle errors gracefully**: The tools will raise exceptions if elements can't be found or if descriptions are ambiguous.
+5. **Be precise with visual analysis prompts**: When using `analyze_screen_detail`, ask specific questions about visual aspects to get the most accurate and useful responses.
+
+6. **Handle errors gracefully**: The tools will raise exceptions if elements can't be found or if descriptions are ambiguous.
 
 ## Troubleshooting
 

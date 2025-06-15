@@ -8,6 +8,7 @@ from main import (
     find_element_by_description,
     tap_element_by_description,
     calibrate,
+    send_keys,
 )
 
 
@@ -232,3 +233,73 @@ async def test_calibrate():
         assert "Calibration complete" in result
         assert "x=1.100" in result
         assert "y=1.200" in result
+
+
+@pytest.mark.asyncio
+async def test_send_keys():
+    """Test that send_keys calls the ADB command correctly."""
+    # Mock the asyncio subprocess
+    mock_process = MagicMock()
+    mock_process.returncode = 0
+    mock_process.communicate = AsyncMock(return_value=(b"", b""))
+
+    with patch(
+        "asyncio.create_subprocess_exec", return_value=mock_process
+    ) as mock_exec:
+        # Call the function
+        result = await send_keys("hello world")
+
+        # Check that the correct command was executed
+        mock_exec.assert_called_once()
+        args = mock_exec.call_args[0]
+        assert args[0] == "adb"
+        assert "input" in args
+        assert "text" in args
+        assert "hello world" in args
+
+        # Check that the result is a confirmation message
+        assert "Sent keystrokes 'hello world'" in result
+
+
+@pytest.mark.asyncio
+async def test_send_keys_with_device_id():
+    """Test that send_keys includes the device ID when provided."""
+    # Mock the asyncio subprocess
+    mock_process = MagicMock()
+    mock_process.returncode = 0
+    mock_process.communicate = AsyncMock(return_value=(b"", b""))
+
+    with patch(
+        "asyncio.create_subprocess_exec", return_value=mock_process
+    ) as mock_exec:
+        # Call the function with a device ID
+        await send_keys("hello world", "test_device")
+
+        # Check that the correct command was executed with the device ID
+        mock_exec.assert_called_once()
+        args = mock_exec.call_args[0]
+        assert args[0] == "adb"
+        assert args[1] == "-s"
+        assert args[2] == "test_device"
+
+
+@pytest.mark.asyncio
+async def test_send_keys_empty_text():
+    """Test that send_keys validates that text is not empty."""
+    # Call the function with empty text and check that it raises the expected error
+    with pytest.raises(ValueError, match="Text cannot be empty"):
+        await send_keys("")
+
+
+@pytest.mark.asyncio
+async def test_send_keys_error():
+    """Test that send_keys handles errors correctly."""
+    # Mock the asyncio subprocess with error
+    mock_process = MagicMock()
+    mock_process.returncode = 1
+    mock_process.communicate = AsyncMock(return_value=(b"", b"ADB error"))
+
+    with patch("asyncio.create_subprocess_exec", return_value=mock_process):
+        # Call the function and check that it raises the expected error
+        with pytest.raises(RuntimeError, match="ADB input text command failed"):
+            await send_keys("hello world")
