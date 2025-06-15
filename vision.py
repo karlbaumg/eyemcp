@@ -195,6 +195,9 @@ def find_element_coordinates_by_description(
     Raises:
         ValueError: If no matching element is found or if the description is ambiguous.
     """
+    import re
+    import json
+
     data_url = f"data:image/png;base64,{screenshot_b64}"
 
     messages: list[dict[str, Any]] = [
@@ -207,7 +210,7 @@ def find_element_coordinates_by_description(
             "content": [
                 {
                     "type": "text",
-                    "text": f'Find the element on the screen that matches this description: \'{element_description}\'. Return ONLY a JSON object with the following format: {{"x": int, "y": int, "confidence": float, "element_description": "string"}}. The confidence should be between 0.0 and 1.0, where 1.0 means you\'re absolutely certain you\'ve found the correct element. If you cannot find a matching element, return {{"error": "Element not found"}}. If the description is ambiguous and matches multiple elements, return {{"error": "Ambiguous description"}}.',
+                    "text": f'Find the element on the screen that matches this description: \'{element_description}\'. Return the x and y coordinates of the center of the element, along with your confidence level (0.0-1.0) and a brief description of what you found. Format your response to include "x:123" and "y:456" somewhere in your answer. If you cannot find a matching element, clearly state "Element not found". If the description is ambiguous and matches multiple elements, clearly state "Ambiguous description".',
                 },
                 {
                     "type": "image_url",
@@ -242,24 +245,69 @@ def find_element_coordinates_by_description(
         response = client.chat.completions.create(
             model=model,
             messages=messages,
-            response_format={"type": "json_object"},
         )
         logger.info("Response received")
 
-        # Parse the JSON response
-        import json
+        content = response.choices[0].message.content
+        logger.info(f"Raw response: {content}")
 
-        result = json.loads(response.choices[0].message.content)
+        # First try to parse as JSON in case the model returns JSON anyway
+        try:
+            result = json.loads(content)
+            # Check for error conditions in JSON format
+            if "error" in result:
+                raise ValueError(result["error"])
 
-        # Check for error conditions
-        if "error" in result:
-            raise ValueError(result["error"])
+            # If we got here, we have valid JSON with no errors
+            logger.info("Successfully parsed response as JSON")
+
+        except json.JSONDecodeError:
+            # Not valid JSON, extract coordinates using regex
+            logger.info(
+                "Response is not valid JSON, extracting coordinates using regex"
+            )
+
+            # Check for error conditions in text format
+            if "Element not found" in content:
+                raise ValueError("Element not found")
+            if "Ambiguous description" in content:
+                raise ValueError("Ambiguous description")
+
+            # Extract x coordinate
+            x_match = re.search(r"x\s*[=:]\s*(\d+)", content, re.IGNORECASE)
+            if not x_match:
+                raise ValueError("Could not find x coordinate in response")
+
+            # Extract y coordinate
+            y_match = re.search(r"y\s*[=:]\s*(\d+)", content, re.IGNORECASE)
+            if not y_match:
+                raise ValueError("Could not find y coordinate in response")
+
+            # Extract confidence if available, default to 0.8 if not found
+            confidence_match = re.search(
+                r"confidence\s*(?:[=:]|level\s+is)\s*(0\.\d+|1\.0|1)",
+                content,
+                re.IGNORECASE,
+            )
+            confidence = float(confidence_match.group(1)) if confidence_match else 0.8
+
+            # Create result dictionary
+            result = {
+                "x": int(x_match.group(1)),
+                "y": int(y_match.group(1)),
+                "confidence": confidence,
+                "element_description": element_description,
+            }
 
         # Validate the response format
-        required_keys = ["x", "y", "confidence", "element_description"]
+        required_keys = ["x", "y", "confidence"]
         for key in required_keys:
             if key not in result:
                 raise ValueError(f"Invalid response format: missing '{key}' field")
+
+        # Add element_description if missing
+        if "element_description" not in result:
+            result["element_description"] = element_description
 
         # Ensure coordinates are integers
         result["x"] = int(result["x"])

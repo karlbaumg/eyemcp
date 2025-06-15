@@ -44,6 +44,26 @@ def mock_openai_json_client():
     return mock_client
 
 
+@pytest.fixture
+def mock_openai_text_client():
+    """Create a mock OpenAI client that returns text responses with coordinates."""
+    mock_client = MagicMock()
+    mock_completion = MagicMock()
+    mock_choice = MagicMock()
+    mock_message = MagicMock()
+
+    # Set up the mock response structure with text content containing coordinates
+    mock_message.content = """
+    I found the element you described. It appears to be a button in the middle of the screen.
+    The coordinates are x: 150 and y: 250. My confidence level is 0.85 that this is the correct element.
+    """
+    mock_choice.message = mock_message
+    mock_completion.choices = [mock_choice]
+    mock_client.chat.completions.create.return_value = mock_completion
+
+    return mock_client
+
+
 def test_describe_screen_interactions(mock_openai_client):
     """Test that describe_screen_interactions calls the OpenAI API correctly and returns the response."""
     with (
@@ -112,9 +132,6 @@ def test_find_element_coordinates_by_description(mock_openai_json_client):
         # Check that the model is set correctly
         assert kwargs["model"] is not None
 
-        # Check that response_format is set to json_object
-        assert kwargs["response_format"] == {"type": "json_object"}
-
         # Check that the messages contain the screenshot and description
         messages = kwargs["messages"]
         user_message = [m for m in messages if m["role"] == "user"][0]
@@ -126,6 +143,40 @@ def test_find_element_coordinates_by_description(mock_openai_json_client):
         assert result["y"] == 200
         assert result["confidence"] == 0.9
         assert result["element_description"] == "Mock element"
+
+
+def test_find_element_coordinates_from_text(mock_openai_text_client):
+    """Test that find_element_coordinates_by_description can extract coordinates from text responses."""
+    with (
+        patch("vision.OpenAI", return_value=mock_openai_text_client),
+        patch("vision.PROVIDER", "openrouter"),
+        patch("vision.OPENROUTER_API_KEY", "test_key"),
+        patch("vision.calibration.is_calibrated", return_value=False),
+    ):
+
+        # Call the function with a mock screenshot and description
+        result = find_element_coordinates_by_description(
+            "mock_screenshot_base64", "button"
+        )
+
+        # Check that the client was called with the correct parameters
+        mock_openai_text_client.chat.completions.create.assert_called_once()
+        args, kwargs = mock_openai_text_client.chat.completions.create.call_args
+
+        # Check that the model is set correctly
+        assert kwargs["model"] is not None
+
+        # Check that the messages contain the screenshot and description
+        messages = kwargs["messages"]
+        user_message = [m for m in messages if m["role"] == "user"][0]
+        assert "button" in user_message["content"][0]["text"]
+        assert "image_url" in user_message["content"][1]
+
+        # Check that the result contains the expected fields extracted from text
+        assert result["x"] == 150
+        assert result["y"] == 250
+        assert result["confidence"] == 0.85
+        assert result["element_description"] == "button"
 
 
 def test_find_element_coordinates_with_calibration(mock_openai_json_client):
@@ -172,6 +223,56 @@ def test_find_element_coordinates_error_response():
             find_element_coordinates_by_description(
                 "mock_screenshot_base64", "nonexistent button"
             )
+
+
+def test_find_element_coordinates_text_error_response():
+    """Test that find_element_coordinates_by_description handles text error responses correctly."""
+    mock_client = MagicMock()
+    mock_completion = MagicMock()
+    mock_choice = MagicMock()
+    mock_message = MagicMock()
+
+    # Set up the mock response structure with a text error
+    mock_message.content = "I'm sorry, but I couldn't find any element matching that description. Element not found."
+    mock_choice.message = mock_message
+    mock_completion.choices = [mock_choice]
+    mock_client.chat.completions.create.return_value = mock_completion
+
+    with (
+        patch("vision.OpenAI", return_value=mock_client),
+        patch("vision.PROVIDER", "openrouter"),
+        patch("vision.OPENROUTER_API_KEY", "test_key"),
+    ):
+
+        # Call the function and check that it raises the expected error
+        with pytest.raises(ValueError, match="Element not found"):
+            find_element_coordinates_by_description(
+                "mock_screenshot_base64", "nonexistent button"
+            )
+
+
+def test_find_element_coordinates_missing_coordinates():
+    """Test that find_element_coordinates_by_description handles responses with missing coordinates."""
+    mock_client = MagicMock()
+    mock_completion = MagicMock()
+    mock_choice = MagicMock()
+    mock_message = MagicMock()
+
+    # Set up the mock response structure with missing coordinates
+    mock_message.content = "I found the button you're looking for. It's a blue button in the center of the screen."
+    mock_choice.message = mock_message
+    mock_completion.choices = [mock_choice]
+    mock_client.chat.completions.create.return_value = mock_completion
+
+    with (
+        patch("vision.OpenAI", return_value=mock_client),
+        patch("vision.PROVIDER", "openrouter"),
+        patch("vision.OPENROUTER_API_KEY", "test_key"),
+    ):
+
+        # Call the function and check that it raises the expected error
+        with pytest.raises(ValueError, match="Could not find x coordinate in response"):
+            find_element_coordinates_by_description("mock_screenshot_base64", "button")
 
 
 def test_find_element_coordinates_invalid_response():
