@@ -3,7 +3,6 @@ import os
 from loguru import logger
 from openai import OpenAI
 from dotenv import load_dotenv
-import calibration
 
 # Load environment variables from .env file
 load_dotenv()
@@ -99,7 +98,7 @@ def describe_screen_interactions(screenshot_b64: str) -> str:
     return description.strip()
 
 
-def analyze_screen_detail(screenshot_b64: str, prompt: str) -> str:
+def run_prompt_against_screen(screenshot_b64: str, prompt: str) -> str:
     """Analyze specific visual details in a screenshot based on a prompt.
 
     This function uses vision AI to analyze specific visual aspects of the screen
@@ -177,9 +176,7 @@ def find_element_coordinates_by_description(
     """Find an element on the screen matching the provided description and return its coordinates.
 
     This function uses vision AI to analyze a screenshot and locate the element
-    that best matches the textual description provided. The returned coordinates
-    are automatically adjusted using the calibration scaling factors if calibration
-    has been performed.
+    that best matches the textual description provided.
 
     Args:
         screenshot_b64: Base64-encoded screenshot image (PNG format).
@@ -190,7 +187,6 @@ def find_element_coordinates_by_description(
         A dictionary containing the x and y coordinates of the center of the matching element,
         along with a confidence score and the element's description as recognized by the vision model.
         Format: {"x": int, "y": int, "confidence": float, "element_description": str}
-        Note: The coordinates are adjusted using calibration scaling factors if available.
 
     Raises:
         ValueError: If no matching element is found or if the description is ambiguous.
@@ -317,17 +313,6 @@ def find_element_coordinates_by_description(
         result["confidence"] = float(result["confidence"])
         if not 0 <= result["confidence"] <= 1:
             result["confidence"] = max(0, min(result["confidence"], 1))
-
-        # Apply calibration scaling if calibrated
-        if calibration.is_calibrated():
-            original_x, original_y = result["x"], result["y"]
-            scaled_x, scaled_y = calibration.apply_scaling(original_x, original_y)
-            result["x"], result["y"] = scaled_x, scaled_y
-            logger.info(
-                f"Applied calibration scaling: ({original_x}, {original_y}) -> ({scaled_x}, {scaled_y})"
-            )
-        else:
-            logger.info("No calibration applied (system not calibrated)")
 
         return result
 

@@ -7,7 +7,6 @@ from main import (
     tap_android_screen,
     find_element_by_description,
     tap_element_by_description,
-    calibrate,
     send_keys,
 )
 
@@ -139,7 +138,6 @@ async def test_find_element_by_description():
     }
 
     with (
-        patch("main.calibration.is_calibrated", return_value=True),
         patch(
             "main.take_android_screenshot",
             AsyncMock(return_value="mock_screenshot_base64"),
@@ -158,15 +156,6 @@ async def test_find_element_by_description():
 
 
 @pytest.mark.asyncio
-async def test_find_element_by_description_not_calibrated():
-    """Test that find_element_by_description raises an error when the system is not calibrated."""
-    with patch("main.calibration.is_calibrated", return_value=False):
-        # Call the function and check that it raises the expected error
-        with pytest.raises(ValueError, match="System needs to be calibrated first"):
-            await find_element_by_description("button")
-
-
-@pytest.mark.asyncio
 async def test_tap_element_by_description():
     """Test that tap_element_by_description calls find_element_by_description and tap_android_screen correctly."""
     mock_element_info = {
@@ -177,7 +166,6 @@ async def test_tap_element_by_description():
     }
 
     with (
-        patch("main.calibration.is_calibrated", return_value=True),
         patch(
             "main.find_element_by_description",
             AsyncMock(return_value=mock_element_info),
@@ -194,45 +182,6 @@ async def test_tap_element_by_description():
         assert "Tapped element 'Mock element'" in result
         assert "(100, 200)" in result
         assert "0.90" in result  # Formatted confidence
-
-
-@pytest.mark.asyncio
-async def test_tap_element_by_description_not_calibrated():
-    """Test that tap_element_by_description raises an error when the system is not calibrated."""
-    with patch("main.calibration.is_calibrated", return_value=False):
-        # Call the function and check that it raises the expected error
-        with pytest.raises(ValueError, match="System needs to be calibrated first"):
-            await tap_element_by_description("button")
-
-
-@pytest.mark.asyncio
-async def test_calibrate():
-    """Test that calibrate loads calibration data and calculates scaling factors correctly."""
-    mock_calibration_points = [
-        {"description": "Element 1", "x": 100, "y": 200},
-        {"description": "Element 2", "x": 300, "y": 400},
-    ]
-    mock_scaling_factors = (1.1, 1.2)
-
-    with (
-        patch("os.path.exists", return_value=True),
-        patch(
-            "main.calibration.load_calibration_data",
-            return_value=mock_calibration_points,
-        ),
-        patch(
-            "main.calibration.calculate_scaling_factors",
-            AsyncMock(return_value=mock_scaling_factors),
-        ),
-    ):
-
-        # Call the function
-        result = await calibrate("test_calibration.csv")
-
-        # Check that the result contains the scaling factors
-        assert "Calibration complete" in result
-        assert "x=1.100" in result
-        assert "y=1.200" in result
 
 
 @pytest.mark.asyncio

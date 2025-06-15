@@ -4,7 +4,7 @@ import json
 from vision import (
     describe_screen_interactions,
     find_element_coordinates_by_description,
-    analyze_screen_detail,
+    run_prompt_against_screen,
 )
 
 
@@ -117,7 +117,6 @@ def test_find_element_coordinates_by_description(mock_openai_json_client):
         patch("vision.OpenAI", return_value=mock_openai_json_client),
         patch("vision.PROVIDER", "openrouter"),
         patch("vision.OPENROUTER_API_KEY", "test_key"),
-        patch("vision.calibration.is_calibrated", return_value=False),
     ):
 
         # Call the function with a mock screenshot and description
@@ -151,7 +150,6 @@ def test_find_element_coordinates_from_text(mock_openai_text_client):
         patch("vision.OpenAI", return_value=mock_openai_text_client),
         patch("vision.PROVIDER", "openrouter"),
         patch("vision.OPENROUTER_API_KEY", "test_key"),
-        patch("vision.calibration.is_calibrated", return_value=False),
     ):
 
         # Call the function with a mock screenshot and description
@@ -177,26 +175,6 @@ def test_find_element_coordinates_from_text(mock_openai_text_client):
         assert result["y"] == 250
         assert result["confidence"] == 0.85
         assert result["element_description"] == "button"
-
-
-def test_find_element_coordinates_with_calibration(mock_openai_json_client):
-    """Test that find_element_coordinates_by_description applies calibration scaling when calibrated."""
-    with (
-        patch("vision.OpenAI", return_value=mock_openai_json_client),
-        patch("vision.PROVIDER", "openrouter"),
-        patch("vision.OPENROUTER_API_KEY", "test_key"),
-        patch("vision.calibration.is_calibrated", return_value=True),
-        patch("vision.calibration.apply_scaling", return_value=(150, 300)),
-    ):
-
-        # Call the function with a mock screenshot and description
-        result = find_element_coordinates_by_description(
-            "mock_screenshot_base64", "button"
-        )
-
-        # Check that calibration scaling was applied
-        assert result["x"] == 150
-        assert result["y"] == 300
 
 
 def test_find_element_coordinates_error_response():
@@ -310,7 +288,7 @@ def test_analyze_screen_detail(mock_openai_client):
     ):
 
         # Call the function with a mock screenshot and prompt
-        result = analyze_screen_detail(
+        result = run_prompt_against_screen(
             "mock_screenshot_base64", "What color is the login button?"
         )
 
@@ -339,7 +317,7 @@ def test_analyze_screen_detail_error_handling():
     ):
 
         # Call the function with a mock screenshot and prompt
-        result = analyze_screen_detail(
+        result = run_prompt_against_screen(
             "mock_screenshot_base64", "What color is the login button?"
         )
 
