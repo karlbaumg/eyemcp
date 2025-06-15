@@ -23,7 +23,7 @@ OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 # Get API key from .env file (loaded into environment variables by dotenv)
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 # Choose your model - examples: "anthropic/claude-3-opus", "openai/gpt-4-vision", etc.
-OPENROUTER_MODEL = "qwen/qwen2.5-vl-72b-instruct:free"
+OPENROUTER_MODEL = "anthropic/claude-sonnet-4"
 
 # Use stderr for logging in MCP server
 # No need to add a logger sink as the default stderr sink is already configured in main.py
