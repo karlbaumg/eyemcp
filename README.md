@@ -180,6 +180,52 @@ Optional parameters:
 
 This tool is useful for entering text such as URLs, search terms, or login credentials.
 
+#### Swipe Actions
+
+##### Swipe Up
+
+Perform a standard swipe up gesture (scrolls down content):
+
+```json
+{
+  "tool": "swipe_up",
+  "args": {}
+}
+```
+
+This performs a swipe from coordinates (360,1000) to (360,500) in 100ms, useful for scrolling down lists, pages, and content.
+
+##### Swipe Down
+
+Perform a standard swipe down gesture (scrolls up content):
+
+```json
+{
+  "tool": "swipe_down",
+  "args": {}
+}
+```
+
+This performs a swipe from coordinates (360,500) to (360,1000) in 100ms, useful for scrolling up lists, pages, and content.
+
+##### Custom Swipe
+
+Perform a swipe between custom coordinates:
+
+```json
+{
+  "tool": "custom_swipe",
+  "args": {
+    "x1": 100,
+    "y1": 500,
+    "x2": 600,
+    "y2": 500
+  }
+}
+```
+
+This performs a swipe from coordinates (x1,y1) to (x2,y2) in 100ms, useful for custom gesture actions like horizontal scrolling, precise positioning, or advanced gestures.
+
 
 ## Tips for Effective Use
 

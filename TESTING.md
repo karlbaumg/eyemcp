@@ -4,11 +4,12 @@ This document provides information about the test suite for the EyeMCP project, 
 
 ## Test Structure
 
-The test suite is organized into three main files:
+The test suite is organized into four main files:
 
 1. **test_main.py**: Tests for the MCP server tools and ADB interactions in `main.py`
 2. **test_vision.py**: Tests for the vision AI functionality in `vision.py`
 3. **test_calibration.py**: Tests for the coordinate calibration system in `calibration.py`
+4. **test_swipe.py**: Tests for the swipe gesture functionality in `main.py`
 
 ## Running Tests
 

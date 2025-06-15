@@ -119,6 +119,87 @@ async def tap_screen(x: int, y: int) -> str:
 
 
 @mcp.tool()
+async def swipe_up() -> str:
+    """Perform a standard swipe up gesture from (360,1000) to (360,500). This is useful for scrolling down content. The swipe occurs in 100ms. Response time: ~200ms"""
+
+    cmd: list[str] = ["adb"]
+    cmd += ["shell", "input", "swipe", "360", "1000", "360", "500", "100"]
+
+    logger.info(f"Executing command: {cmd}")
+
+    process = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+
+    stdout, stderr = await process.communicate()
+
+    if process.returncode != 0:
+        raise RuntimeError(
+            f"ADB swipe up command failed (exit code {process.returncode}): "
+            f"{stderr.decode().strip()}"
+        )
+    _ = stdout
+    return "Performed swipe up from (360, 1000) to (360, 500) in 100ms."
+
+
+@mcp.tool()
+async def swipe_down() -> str:
+    """Perform a standard swipe down gesture from (360,500) to (360,1000). This is useful for scrolling up content. The swipe occurs in 100ms. Response time: ~200ms"""
+
+    cmd: list[str] = ["adb"]
+    cmd += ["shell", "input", "swipe", "360", "500", "360", "1000", "100"]
+
+    logger.info(f"Executing command: {cmd}")
+
+    process = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+
+    stdout, stderr = await process.communicate()
+
+    if process.returncode != 0:
+        raise RuntimeError(
+            f"ADB swipe down command failed (exit code {process.returncode}): "
+            f"{stderr.decode().strip()}"
+        )
+    _ = stdout
+    return "Performed swipe down from (360, 500) to (360, 1000) in 100ms."
+
+
+@mcp.tool()
+async def custom_swipe(x1: int, y1: int, x2: int, y2: int) -> str:
+    """Perform a custom swipe gesture from coordinates (x1,y1) to (x2,y2). The swipe occurs in 100ms. Use coordinates obtained from inspect_screen_structure for reliable interaction. Screen dimensions: 720x1616 pixels, origin (0,0) at top-left. Response time: ~200ms"""
+
+    if x1 < 0 or y1 < 0 or x2 < 0 or y2 < 0:
+        raise ValueError("Coordinates must be non-negative integers.")
+
+    cmd: list[str] = ["adb"]
+    cmd += ["shell", "input", "swipe", str(x1), str(y1), str(x2), str(y2), "100"]
+
+    logger.info(f"Executing command: {cmd}")
+
+    process = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+
+    stdout, stderr = await process.communicate()
+
+    if process.returncode != 0:
+        raise RuntimeError(
+            f"ADB custom swipe command failed (exit code {process.returncode}): "
+            f"{stderr.decode().strip()}"
+        )
+    _ = stdout
+    return f"Performed custom swipe from ({x1}, {y1}) to ({x2}, {y2}) in 100ms."
+
+
+@mcp.tool()
 async def input_text(text: str) -> str:
     """Type text into the currently focused input field. Ensure an input field is selected (via tap_screen) before using. Response time: ~200ms"""
     if not text:
