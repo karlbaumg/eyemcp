@@ -1,12 +1,20 @@
 [project]
 name = "eyemcp"
 version = "0.1.0"
-description = "Add your description here"
+description = "Android screen interaction via vision AI"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "httpx>=0.28.1",
     "mcp[cli]>=1.9.4",
     "openai>=1.86.0",
-    "loguru"
+    "loguru",
+    "python-dotenv>=1.0.0",
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0"
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+asyncio_mode = "auto"

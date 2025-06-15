@@ -1,13 +1,17 @@
 from mcp.server.fastmcp import FastMCP
 import asyncio
 import base64
+import sys
+import os
 from loguru import logger
-from vision import describe_screen_interactions
+from vision import describe_screen_interactions, find_element_coordinates_by_description
+import calibration
 
 
-# Configure logging: remove the default stderr sink and log exclusively to file.
-logger.remove()
-logger.add("mcp.log", encoding="utf-8", enqueue=True)
+# Configure logging to use stderr for MCP server compatibility
+# The default stderr sink is already added by loguru
+# We can add additional configuration if needed
+logger.configure(handlers=[{"sink": sys.stderr, "level": "INFO"}])
 
 # Initialize FastMCP server
 mcp = FastMCP("eyemcp")
@@ -50,13 +54,24 @@ async def take_android_screenshot(device_id: str | None = None) -> str:
 
 @mcp.tool()
 async def describe_screen(device_id: str | None = None) -> str:
-    """Describe the screen of a connected Android device together with the pixel coordinates of the elements
-    that can be tapped on via adb. The dimensions of the screen is 720x1616.
+    """Describe all interactive elements on the Android screen.
+
+    This tool captures a screenshot from a connected Android device and uses vision AI
+    to identify all interactive elements on the screen. It provides a detailed description
+    of each element that can be used with find_element_by_description or tap_element_by_description.
+
+    Unlike previous versions, this tool no longer returns coordinates. To get coordinates
+    or tap elements, use the find_element_by_description or tap_element_by_description tools.
+
+    Args:
+        device_id: Optional serial number of the target device as returned by
+            ``adb devices``. If omitted, the first connected device is used.
 
     Returns:
-        A natural-language description of what is visible on the screen along with the coordinates of the elements.
+        A natural-language description of what is visible on the screen, including
+        detailed information about each interactive element that can be used to identify
+        them with other tools.
     """
-
     screenshot_b64: str = await take_android_screenshot(device_id)
 
     return describe_screen_interactions(screenshot_b64)
@@ -64,16 +79,21 @@ async def describe_screen(device_id: str | None = None) -> str:
 
 @mcp.tool()
 async def tap_android_screen(x: int, y: int, device_id: str | None = None) -> str:
-    """Tap the screen of a connected Android device at the given coordinates.
+    """Tap the screen of a connected Android device at the specified coordinates.
+
+    This tool sends a tap event to the specified coordinates on the Android device's screen.
+    The screen dimensions are 720x1616 pixels with the origin (0,0) at the top-left corner.
+    Coordinates are specified as (x,y) pairs where x is the horizontal position and y is
+    the vertical position.
 
     Args:
-        x: Horizontal pixel coordinate.
-        y: Vertical pixel coordinate.
-        device_id: Optional device serial (from ``adb devices``) if multiple
-            devices are connected.
+        x: Horizontal pixel coordinate (0-719).
+        y: Vertical pixel coordinate (0-1615).
+        device_id: Optional serial number of the target device as returned by
+            ``adb devices``. If omitted, the first connected device is used.
 
     Returns:
-        A short confirmation message when the tap succeeds.
+        A confirmation message with the coordinates that were tapped and the device ID.
     """
 
     if x < 0 or y < 0:
@@ -101,6 +121,142 @@ async def tap_android_screen(x: int, y: int, device_id: str | None = None) -> st
         )
     _ = stdout
     return f"Tapped at ({x}, {y}) on device {device_id or '<default>'}."
+
+
+@mcp.tool()
+async def find_element_by_description(
+    description: str, device_id: str | None = None
+) -> dict:
+    """Find an element on the Android screen matching the provided description and return its coordinates.
+
+    This tool captures a screenshot, analyzes it using vision AI, and locates the element
+    that best matches the textual description. The screen dimensions are 720x1616 pixels
+    with the origin (0,0) at the top-left corner.
+
+    Args:
+        description: Textual description of the element to find (e.g., "login button",
+                    "search icon in the top right", "profile picture").
+        device_id: Optional serial number of the target device as returned by
+                  ``adb devices``. If omitted, the first connected device is used.
+
+    Returns:
+        A dictionary containing the x and y coordinates of the center of the matching element,
+        along with a confidence score and the element's description as recognized by the vision model.
+        Format: {"x": int, "y": int, "confidence": float, "element_description": str}
+
+    Raises:
+        ValueError: If no matching element is found or if the description is ambiguous.
+                   Also raises ValueError if the system has not been calibrated.
+    """
+    # Check if the system is calibrated
+    if not calibration.is_calibrated():
+        raise ValueError(
+            "System needs to be calibrated first. Please run the calibrate tool before using this tool."
+        )
+    screenshot_b64: str = await take_android_screenshot(device_id)
+
+    return find_element_coordinates_by_description(screenshot_b64, description)
+
+
+@mcp.tool()
+async def tap_element_by_description(
+    description: str, device_id: str | None = None
+) -> str:
+    """Find and tap an element on the Android screen that matches the provided description.
+
+    This tool first locates the element using vision AI based on the textual description,
+    then taps at the center coordinates of the matching element. The screen dimensions are
+    720x1616 pixels with the origin (0,0) at the top-left corner.
+
+    Args:
+        description: Textual description of the element to tap (e.g., "login button",
+                    "search icon in the top right", "profile picture").
+        device_id: Optional serial number of the target device as returned by
+                  ``adb devices``. If omitted, the first connected device is used.
+
+    Returns:
+        A confirmation message with details about the tapped element, including its
+        coordinates and the element's description as recognized by the vision model.
+
+    Raises:
+        ValueError: If no matching element is found or if the description is ambiguous.
+                   Also raises ValueError if the system has not been calibrated.
+    """
+    # Check if the system is calibrated
+    if not calibration.is_calibrated():
+        raise ValueError(
+            "System needs to be calibrated first. Please run the calibrate tool before using this tool."
+        )
+    # First, find the element coordinates
+    element_info = await find_element_by_description(description, device_id)
+
+    # Then tap at those coordinates
+    x, y = element_info["x"], element_info["y"]
+    tap_result = await tap_android_screen(x, y, device_id)
+
+    # Return a detailed confirmation message
+    return f"Tapped element '{element_info['element_description']}' at coordinates ({x}, {y}) with confidence {element_info['confidence']:.2f}"
+
+
+@mcp.tool()
+async def calibrate(
+    calibration_file: str = "calibration.csv", device_id: str | None = None
+) -> str:
+    """Calibrate the coordinate system using known reference points.
+
+    This tool navigates to the home screen and then uses the provided calibration file
+    to calculate scaling factors for x and y coordinates. These scaling factors are used
+    to adjust coordinates in all other tools to ensure accurate element targeting.
+
+    The calibration file should be a CSV with columns: description, x, y containing
+    reference elements and their expected coordinates.
+
+    Args:
+        calibration_file: Path to a CSV file with columns: description, x, y
+                         containing reference elements and their expected coordinates.
+        device_id: Optional serial number of the target device as returned by
+                  ``adb devices``. If omitted, the first connected device is used.
+
+    Returns:
+        A confirmation message with the calculated scaling factors.
+
+    Raises:
+        FileNotFoundError: If the calibration file does not exist.
+        ValueError: If calibration fails due to inability to find reference elements.
+    """
+    # Check if calibration file exists
+    if not os.path.exists(calibration_file):
+        # Try to create a sample calibration file
+        try:
+            logger.info(
+                f"Calibration file not found. Creating sample at {calibration_file}"
+            )
+        except Exception as e:
+            raise FileNotFoundError(f"Calibration file not found: {e}")
+
+    # Load calibration data
+    calibration_points = calibration.load_calibration_data(calibration_file)
+    logger.info(
+        f"Loaded {len(calibration_points)} calibration points from {calibration_file}"
+    )
+
+    # Define a wrapper function for find_element_by_description that doesn't apply scaling
+    # (since we're calculating the scaling factors)
+    async def find_element_raw(description: str, device_id: str | None = None) -> dict:
+        screenshot_b64: str = await take_android_screenshot(device_id)
+        # Get raw coordinates without scaling
+        result = find_element_coordinates_by_description(screenshot_b64, description)
+        return result
+
+    # Calculate scaling factors
+    scaling_x, scaling_y = await calibration.calculate_scaling_factors(
+        calibration_points, find_element_raw, device_id
+    )
+
+    return (
+        f"Calibration complete. Scaling factors: x={scaling_x:.3f}, y={scaling_y:.3f}. "
+        f"These factors will be applied to all coordinate operations."
+    )
 
 
 if __name__ == "__main__":
