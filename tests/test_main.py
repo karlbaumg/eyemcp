@@ -319,3 +319,90 @@ async def test_get_device_info_command_failures():
             assert result["android_version"].get("release", "") == ""
         if "battery" in result:
             assert isinstance(result["battery"], dict)
+
+
+@pytest.mark.asyncio
+async def test_run_adb_command():
+    """Test that run_adb_command calls the ADB command correctly."""
+    # Mock the asyncio subprocess
+    mock_process = MagicMock()
+    mock_process.returncode = 0
+    mock_process.communicate = AsyncMock(return_value=(b"mock command output", b""))
+
+    with patch(
+        "asyncio.create_subprocess_exec", return_value=mock_process
+    ) as mock_exec:
+        # Call the function
+        from main import run_adb_command
+
+        result = await run_adb_command("devices")
+
+        # Check that the correct command was executed
+        mock_exec.assert_called_once()
+        args = mock_exec.call_args[0]
+        assert args[0] == "adb"
+        assert args[1] == "devices"
+
+        # Check that the result is the command output
+        assert result == "mock command output"
+
+
+@pytest.mark.asyncio
+async def test_run_adb_command_complex():
+    """Test that run_adb_command handles complex commands with multiple arguments correctly."""
+    # Mock the asyncio subprocess
+    mock_process = MagicMock()
+    mock_process.returncode = 0
+    mock_process.communicate = AsyncMock(
+        return_value=(b"package:com.android.example", b"")
+    )
+
+    with patch(
+        "asyncio.create_subprocess_exec", return_value=mock_process
+    ) as mock_exec:
+        # Call the function with a complex command
+        from main import run_adb_command
+
+        result = await run_adb_command("shell pm list packages com.android")
+
+        # Check that the correct command was executed
+        mock_exec.assert_called_once()
+        args = mock_exec.call_args[0]
+        assert args[0] == "adb"
+        assert args[1] == "shell"
+        assert args[2] == "pm"
+        assert args[3] == "list"
+        assert args[4] == "packages"
+        assert args[5] == "com.android"
+
+        # Check that the result is the command output
+        assert result == "package:com.android.example"
+
+
+@pytest.mark.asyncio
+async def test_run_adb_command_empty():
+    """Test that run_adb_command validates that command is not empty."""
+    # Call the function with empty command and check that it raises the expected error
+    from main import run_adb_command
+
+    with pytest.raises(ValueError, match="Command cannot be empty"):
+        await run_adb_command("")
+
+    with pytest.raises(ValueError, match="Command cannot be empty"):
+        await run_adb_command("   ")
+
+
+@pytest.mark.asyncio
+async def test_run_adb_command_error():
+    """Test that run_adb_command handles errors correctly."""
+    # Mock the asyncio subprocess with error
+    mock_process = MagicMock()
+    mock_process.returncode = 1
+    mock_process.communicate = AsyncMock(return_value=(b"", b"ADB error message"))
+
+    with patch("asyncio.create_subprocess_exec", return_value=mock_process):
+        # Call the function and check that it raises the expected error
+        from main import run_adb_command
+
+        with pytest.raises(RuntimeError, match="ADB command failed"):
+            await run_adb_command("some-invalid-command")

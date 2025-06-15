@@ -284,6 +284,48 @@ async def capture_screenshot() -> Image:
 
 
 @mcp.tool()
+async def run_adb_command(command: str) -> str:
+    """Execute an arbitrary ADB command and return its output.
+
+    This tool allows running any ADB command directly. Use with caution and only for commands
+    not covered by the specialized tools above. The command should NOT include the 'adb' prefix.
+
+    Args:
+        command: The ADB command to execute (without the 'adb' prefix).
+                 Example: "shell pm list packages" or "devices"
+
+    Returns:
+        The command's stdout output as a string.
+
+    Response time: varies based on command complexity
+    """
+    if not command or not command.strip():
+        raise ValueError("Command cannot be empty.")
+
+    # Build the full command with adb prefix
+    cmd: list[str] = ["adb"]
+    cmd.extend(command.split())
+
+    logger.info(f"Executing arbitrary ADB command: {cmd}")
+
+    process = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+
+    stdout, stderr = await process.communicate()
+
+    if process.returncode != 0:
+        error_msg = stderr.decode().strip()
+        raise RuntimeError(
+            f"ADB command failed (exit code {process.returncode}): {error_msg}"
+        )
+
+    return stdout.decode().strip()
+
+
+@mcp.tool()
 async def get_device_info() -> dict:
     """Get useful properties about the connected Android device.
 

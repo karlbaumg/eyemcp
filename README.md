@@ -180,6 +180,28 @@ Optional parameters:
 
 This tool is useful for entering text such as URLs, search terms, or login credentials.
 
+#### Run Arbitrary ADB Command
+
+Execute any ADB command directly:
+
+```json
+{
+  "tool": "run_adb_command",
+  "args": {
+    "command": "shell pm list packages"
+  }
+}
+```
+
+This tool allows running any ADB command and returns its output. It's useful for:
+- Listing installed packages
+- Checking device properties
+- Managing apps and settings
+- Running shell commands
+- Other advanced ADB operations not covered by specialized tools
+
+Note: The `command` should NOT include the 'adb' prefix as it's automatically added. For example, use `shell pm list packages` instead of `adb shell pm list packages`.
+
 #### Swipe Actions
 
 ##### Swipe Up

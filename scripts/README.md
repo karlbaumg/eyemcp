@@ -4,7 +4,7 @@ This directory contains utility scripts for the EyeMCP project.
 
 ## Available Scripts
 
-### setup_android.sh
+### start_android.sh
 
 This script automates the setup process for Android device interaction:
 
@@ -12,11 +12,13 @@ This script automates the setup process for Android device interaction:
 2. Starts the EyeMCP server using 'lim run android'
 3. Enables tap visualization and pointer location on the connected Android device
 4. Configures additional helpful developer settings
+5. Installs all APK files from the "apks/" directory
+6. Adds all installed apps to the Android home screen (optimized for Lawnchair launcher)
 
 #### Usage
 
 ```bash
-./scripts/setup_android.sh
+./scripts/start_android.sh
 ```
 
 #### What it does
@@ -28,6 +30,8 @@ This script automates the setup process for Android device interaction:
 - Enables pointer location (shows touch coordinates at top of screen)
 - Ensures developer options are enabled
 - Configures the screen to stay on while charging
+- Scans the "apks/" directory and installs all APK files found
+- Adds each installed app to the Android home screen (with specific support for Lawnchair launcher)
 - Saves the server PID for later use by stop_server.sh
 
 #### How to stop
@@ -81,7 +85,7 @@ This script stops the EyeMCP server that was started by setup_android.sh.
 
 ### test_setup.sh
 
-This script tests the functionality of setup_android.sh without actually running the EyeMCP server. It's useful for verifying ADB commands work correctly.
+This script tests the functionality of start_android.sh without actually running the EyeMCP server. It's useful for verifying ADB commands work correctly.
 
 #### Usage
 

@@ -1,13 +1,15 @@
 #!/bin/bash
-# setup_android.sh
+# start_android.sh
 #
 # This script automates the setup process for Android device interaction:
 # 1. Disconnects any connected ADB devices
 # 2. Starts the limbar server using 'lim run android'
 # 3. Waits for an Android device to connect
 # 4. Enables tap visualization and pointer location on the connected Android device
+# 5. Installs all APK files from the apks/ directory
+# 6. Adds all installed apps to the Android home screen
 #
-# Usage: ./scripts/setup_android.sh
+# Usage: ./scripts/start_android.sh
 
 # Exit on error
 set -e
@@ -101,6 +103,80 @@ adb shell settings put global development_settings_enabled 1
 # Keep screen on while charging
 echo "Setting screen to stay on while charging..."
 adb shell settings put global stay_on_while_plugged_in 3
+
+# Step 5: Install all APK files from the apks/ directory
+echo "=== Installing APK files from apks/ directory ==="
+APK_DIR="$(dirname "$(dirname "$0")")/apks"
+APK_COUNT=$(find "$APK_DIR" -name "*.apk" | wc -l | tr -d '[:space:]')
+
+if [ "$APK_COUNT" -eq 0 ]; then
+    echo "No APK files found in $APK_DIR"
+else
+    echo "Found $APK_COUNT APK file(s) to install"
+    
+    # Loop through each APK file in the apks/ directory
+    find "$APK_DIR" -name "*.apk" | while read apk_file; do
+        echo "Installing: $(basename "$apk_file")"
+        
+        # Install APK using ADB
+        adb install -r "$apk_file"
+        
+        # Get package name from the APK
+        PACKAGE_NAME=$(aapt dump badging "$apk_file" | grep package | awk -F"'" '{print $2}')
+        
+        if [ -n "$PACKAGE_NAME" ]; then
+            echo "Installed package: $PACKAGE_NAME"
+            
+            # Get main activity name
+            MAIN_ACTIVITY=$(aapt dump badging "$apk_file" | grep -A1 "launchable-activity" | head -n1 | awk -F"'" '{print $2}')
+            
+            if [ -n "$MAIN_ACTIVITY" ]; then
+                echo "Adding $PACKAGE_NAME to home screen (Lawnchair launcher)..."
+                
+                # Method 1: Launch app drawer on Lawnchair
+                adb shell input keyevent KEYCODE_HOME
+                sleep 1
+                
+                # Swipe up from bottom to middle to open app drawer (common gesture for Lawnchair)
+                SCREEN_SIZE=$(adb shell wm size | grep -o '[0-9]*x[0-9]*')
+                WIDTH=$(echo $SCREEN_SIZE | cut -d'x' -f1)
+                HEIGHT=$(echo $SCREEN_SIZE | cut -d'x' -f2)
+                
+                CENTER_X=$((WIDTH / 2))
+                BOTTOM_Y=$((HEIGHT - 100))
+                CENTER_Y=$((HEIGHT / 2))
+                
+                # Open app drawer
+                adb shell input swipe $CENTER_X $BOTTOM_Y $CENTER_X $CENTER_Y 300
+                sleep 2
+                
+                # Method 2: Use Lawnchair's broadcast receiver to add shortcut (if available)
+                echo "Attempting to add shortcut via intent broadcast..."
+                adb shell am broadcast -a ch.deletescape.lawnchair.ADD_ITEM --es packageName "$PACKAGE_NAME" --es className "$MAIN_ACTIVITY"
+                sleep 1
+                
+                # Method 3: Direct launch approach (fallback)
+                echo "Launching app to ensure it appears in recents..."
+                adb shell am start -n "$PACKAGE_NAME/$MAIN_ACTIVITY" -a android.intent.action.MAIN -c android.intent.category.LAUNCHER
+                sleep 2
+                
+                # Go back to home
+                adb shell input keyevent KEYCODE_HOME
+                sleep 1
+                
+                # Inform user that manual pinning might be needed
+                echo "Note: You may need to manually pin the app to home screen if automatic methods didn't work."
+                echo "The app has been launched at least once and should appear in your app drawer."
+            else
+                echo "Could not determine main activity for $PACKAGE_NAME"
+            fi
+        else
+            echo "Could not determine package name for $(basename "$apk_file")"
+        fi
+        
+        echo "-------------------------"
+    done
+fi
 
 echo "=== Setup Complete ==="
 echo "limbar server is running in the background (PID: $LIM_PID)"
